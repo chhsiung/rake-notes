@@ -2,6 +2,48 @@ require 'colored'
 
 module Rake
   module Notes
+
+    # this is the original rake notes format
+    class StringRakeNotesFormatter
+      def self.formatted_output(results, options={})
+        options[:indent] = results.map { |f, a| a.map(&:line) }.flatten.max.to_s.size
+        out = options.delete(:out) || $stdout
+        results.keys.sort.each do |file|
+          out.puts "#{file[2..-1]}:"
+          results[file].each do |note|
+            out.puts "  * #{note.to_s(options)}"
+          end
+          out.puts
+        end
+      end
+    end
+
+    # generate yml to be sucked into mustache template
+    class YmlRakeNotesFormatter
+      def self.indent(space, times)
+        s = ''
+        (space * times).times do
+          s << ' '
+        end
+        s
+      end
+
+      def self.formatted_output(results, options={})
+        options[:indent] = results.map { |f, a| a.map(&:line) }.flatten.max.to_s.size
+        out = options.delete(:out) || $stdout
+        out.puts "files:"
+        results.keys.sort.each do |file|
+          out.puts "- filename: #{file[2..-1]}"
+          out.puts "#{indent(options[:indent], 1)}annotations:"
+          results[file].each do |note|
+            out.puts "#{indent(options[:indent], 1)}- linenumber: #{note.line}"
+            out.puts "#{indent(options[:indent], 2)}type: #{note.tag}"
+            out.puts "#{indent(options[:indent], 2)}comment: #{note.text}"
+          end
+        end
+      end
+    end
+
     # From:
     # https://github.com/rails/rails/blob/master/railties/lib/rails/source_annotation_extractor.rb
     #
@@ -51,7 +93,9 @@ module Rake
       # This class method is the single entry point for the rake tasks.
       def self.enumerate(tag, options={})
         extractor = new(tag)
-        extractor.display(extractor.find, options)
+        f = get_formatter(options.delete(:format) || :string)
+        f.formatted_output(extractor.find, options)
+        #extractor.display(extractor.find, options)
       end
 
       attr_reader :tag
@@ -116,6 +160,15 @@ module Rake
             out.puts "  * #{note.to_s(options)}"
           end
           out.puts
+        end
+      end
+
+      def self.get_formatter(format_type)
+        case format_type
+          when :yml
+            YmlRakeNotesFormatter
+          else
+            StringRakeNotesFormatter
         end
       end
     end
